@@ -39,30 +39,27 @@ class SapakClientTest extends TestCase
      */
     public function test_it_sends_message_successfully_and_returns_dto(): void
     {
-        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], json_encode([
-            ['id' => 12345, 'status' => 1]
-        ]));
+        // Arrange
+        $mockResponseJson = json_encode([['id' => 12345, 'status' => 1]]);
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], $mockResponseJson);
         $this->mockHandler->append($mockResponse);
 
         $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
 
-        $messageDto = new SendMessage(
-            from: '985000',
-            to: ['98912...'],
-            text: 'Test Body'
-        );
-
+        // Act
+        $messageDto = new SendMessage('985000', ['98912...'], 'Test Body');
         $results = $client->messages()->send($messageDto);
 
+        // Assert DTO
         $this->assertIsArray($results);
         $this->assertCount(1, $results);
         $this->assertInstanceOf(SentMessageStatus::class, $results[0]);
         $this->assertEquals(12345, $results[0]->id);
         $this->assertEquals(1, $results[0]->status);
 
+        // Assert request
         $this->assertCount(1, $this->historyContainer);
         $request = $this->historyContainer[0]['request'];
-
         $this->assertEquals('/v1/messages', $request->getUri()->getPath());
         $this->assertEquals('POST', $request->getMethod());
         $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
@@ -75,7 +72,6 @@ class SapakClientTest extends TestCase
             'isFlash' => false,
             'sendAt' => null,
         ];
-
         $this->assertEquals($expectedBody, json_decode($request->getBody()->getContents(), true));
     }
 
@@ -85,9 +81,8 @@ class SapakClientTest extends TestCase
      */
     public function test_it_throws_authentication_exception_on_401(): void
     {
-        $mockResponse = new Response(401, ['Content-Type' => 'application/json'], json_encode([
-            'message' => 'Invalid API Key'
-        ]));
+        $mockResponseJson = json_encode(['message' => 'Invalid API Key']);
+        $mockResponse = new Response(401, ['Content-Type' => 'application/json'], $mockResponseJson);
         $this->mockHandler->append($mockResponse);
 
         $client = new SapakClient('INVALID_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
@@ -105,9 +100,8 @@ class SapakClientTest extends TestCase
      */
     public function test_it_throws_validation_exception_on_400(): void
     {
-        $mockResponse = new Response(400, ['Content-Type' => 'application/json'], json_encode([
-            'message' => '"text" is required'
-        ]));
+        $mockResponseJson = json_encode(['message' => '"text" is required']);
+        $mockResponse = new Response(400, ['Content-Type' => 'application/json'], $mockResponseJson);
         $this->mockHandler->append($mockResponse);
 
         $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
@@ -115,7 +109,7 @@ class SapakClientTest extends TestCase
         $this->expectException(ValidationException::class);
         $this->expectExceptionMessage('"text" is required');
 
-        $messageDto = new SendMessage('985000', ['98912...'], '');
+        $messageDto = new SendMessage('985000', ['98912...'], 'Valid client-side text');
         $client->messages()->send($messageDto);
     }
 
@@ -125,9 +119,8 @@ class SapakClientTest extends TestCase
      */
     public function test_it_throws_api_exception_on_500(): void
     {
-        $mockResponse = new Response(500, ['Content-Type' => 'application/json'], json_encode([
-            'message' => 'Internal Server Error'
-        ]));
+        $mockResponseJson = json_encode(['message' => 'Internal Server Error']);
+        $mockResponse = new Response(500, ['Content-Type' => 'application/json'], $mockResponseJson);
         $this->mockHandler->append($mockResponse);
 
         $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
@@ -146,36 +139,31 @@ class SapakClientTest extends TestCase
      */
     public function test_it_sends_p2p_message_successfully_and_returns_dto(): void
     {
-        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], json_encode([
+        // Arrange
+        $mockResponseJson = json_encode([
             ['id' => 98765, 'status' => 1],
             ['id' => 98766, 'status' => 2]
-        ]));
+        ]);
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], $mockResponseJson);
         $this->mockHandler->append($mockResponse);
 
         $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
 
-        $p2pMessage1 = new SendPeerToPeer(
-            sender: '985000',
-            recipient: '98912111',
-            message: 'Hello 1'
-        );
-        $p2pMessage2 = new SendPeerToPeer(
-            sender: '985000',
-            recipient: '98912222',
-            message: 'Hello 2'
-        );
-
+        // Act
+        $p2pMessage1 = new SendPeerToPeer('985000', '98912111', 'Hello 1');
+        $p2pMessage2 = new SendPeerToPeer('985000', '98912222', 'Hello 2');
         $results = $client->messages()->sendPeerToPeer([$p2pMessage1, $p2pMessage2]);
 
+        // Assert DTOs
         $this->assertIsArray($results);
         $this->assertCount(2, $results);
         $this->assertInstanceOf(SentMessageStatus::class, $results[0]);
         $this->assertEquals(98765, $results[0]->id);
         $this->assertEquals(2, $results[1]->status);
 
+        // Assert request
         $this->assertCount(1, $this->historyContainer);
         $request = $this->historyContainer[0]['request'];
-
         $this->assertEquals('/v1/messages/p2p', $request->getUri()->getPath());
         $this->assertEquals('POST', $request->getMethod());
         $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
@@ -195,7 +183,6 @@ class SapakClientTest extends TestCase
                 'sendAt' => null
             ]
         ];
-
         $this->assertEquals($expectedBody, json_decode($request->getBody()->getContents(), true));
     }
 }
