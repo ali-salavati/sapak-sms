@@ -21,6 +21,11 @@ use Sapak\Sms\Exceptions\ValidationException;
 class MessageResource extends AbstractResource
 {
     /**
+     * @var int The maximum number of IDs that can be checked in a single status request.
+     */
+    private const MAX_STATUS_IDS = 100;
+
+    /**
      * Send a message to one or more recipients (one-to-many).
      *
      * @param SendMessage $message DTO containing message parameters.
@@ -126,4 +131,50 @@ class MessageResource extends AbstractResource
             );
         }, $data);
     }
+
+    /**
+     * Retrieve the status of multiple messages by their IDs.
+     *
+     * @param int[] $messageIds Array of message IDs (maximum 100 IDs per request).
+     * @return SentMessageStatus[] Array of DTOs containing ID and status for each message.
+     *
+     * @throws InvalidArgumentException If the input array is empty, exceeds the limit, or contains non-integer values.
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function getStatuses(array $messageIds): array
+    {
+        // Client-side validation
+        if (empty($messageIds)) {
+            throw new InvalidArgumentException('Message IDs array cannot be empty.');
+        }
+
+        if (count($messageIds) > self::MAX_STATUS_IDS) {
+            throw new InvalidArgumentException(
+                sprintf('Cannot request more than %d statuses in a single request.', self::MAX_STATUS_IDS)
+            );
+        }
+
+        // Ensure all IDs are integers
+        foreach ($messageIds as $id) {
+            if (!is_int($id)) {
+                throw new InvalidArgumentException('All items in message IDs array must be integers.');
+            }
+        }
+
+        // Send request to API
+        $response = $this->request('post', 'messages/statuses', [
+            'json' => $messageIds
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), true);
+
+        // Map API response to SentMessageStatus DTOs
+        return array_map(fn(array $item) => new SentMessageStatus(
+            id: $item['messageId'], // Map API's "messageId" to our DTO's "id"
+            status: $item['status']
+        ), $data);
+    }
+
 }

@@ -8,6 +8,7 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Sapak\Sms\DTOs\Requests\FindMessages;
 use Sapak\Sms\DTOs\Responses\ReceivedMessage;
@@ -269,5 +270,78 @@ class SapakClientTest extends TestCase
         $this->assertEquals('/v1/users/me/credit', $request->getUri()->getPath());
         $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
         $this->assertEquals('', $request->getUri()->getQuery()); // Ensure no query params were sent
+    }
+
+    /**
+     * @throws AuthenticationException
+     * @throws ValidationException
+     * @throws ApiException
+     */
+    public function test_it_gets_statuses_successfully(): void
+    {
+        // Arrange: Prepare mock API response
+        $mockResponseJson = json_encode([
+            ["messageId" => 1001, "status" => SentMessageStatus::STATUS_DELIVERED_TO_OPERATOR],
+            ["messageId" => 1002, "status" => SentMessageStatus::STATUS_BLACKLISTED]
+        ]);
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], $mockResponseJson);
+        $this->mockHandler->append($mockResponse);
+
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+        $requestIds = [1001, 1002];
+
+        // Act: Call the method
+        $results = $client->messages()->getStatuses($requestIds);
+
+        // Assert: DTO response
+        $this->assertCount(2, $results);
+        $this->assertInstanceOf(SentMessageStatus::class, $results[0]);
+        $this->assertEquals(1001, $results[0]->id);
+        $this->assertEquals(SentMessageStatus::STATUS_DELIVERED_TO_OPERATOR, $results[0]->status);
+        $this->assertEquals(1002, $results[1]->id);
+        $this->assertEquals(SentMessageStatus::STATUS_BLACKLISTED, $results[1]->status);
+
+        // Assert: Helper method
+        $this->assertEquals('Delivered to operator', $results[0]->getStatusText());
+        $this->assertEquals('Blacklisted by operator', $results[1]->getStatusText());
+
+        // Assert: Request sent
+        $this->assertCount(1, $this->historyContainer);
+        $request = $this->historyContainer[0]['request'];
+        $this->assertEquals('POST', $request->getMethod());
+        $this->assertEquals('/v1/messages/statuses', $request->getUri()->getPath());
+        $this->assertEquals(json_encode($requestIds), $request->getBody()->getContents());
+    }
+
+    /**
+     * @throws ValidationException
+     * @throws AuthenticationException
+     * @throws ApiException
+     */
+    public function test_it_throws_exception_if_getting_statuses_for_too_many_ids(): void
+    {
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+        $tooManyIds = range(1, 101);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Cannot request more than 100');
+
+        $client->messages()->getStatuses($tooManyIds);
+    }
+
+    /**
+     * @throws ValidationException
+     * @throws AuthenticationException
+     * @throws ApiException
+     */
+    public function test_it_throws_exception_if_status_ids_are_not_integers(): void
+    {
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+        $invalidIds = [123, "456", 789];
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('All items in message IDs array must be integers');
+
+        $client->messages()->getStatuses($invalidIds);
     }
 }
