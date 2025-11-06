@@ -3,6 +3,7 @@
 namespace Sapak\Sms\Tests\Feature;
 
 use DateTime;
+use DateTimeImmutable;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
@@ -220,7 +221,7 @@ class SapakClientTest extends TestCase
         $this->assertInstanceOf(ReceivedMessage::class, $results[0]);
         $this->assertEquals(123, $results[0]->id);
 
-        $this->assertInstanceOf(\DateTimeImmutable::class, $results[0]->date);
+        $this->assertInstanceOf(DateTimeImmutable::class, $results[0]->date);
 
         $this->assertEquals(
             '2025-11-07 01:14:40',
@@ -236,5 +237,37 @@ class SapakClientTest extends TestCase
             str_replace('+', '%20', $expectedQuery),
             str_replace('+', '%20', $request->getUri()->getQuery())
         );
+    }
+
+    /**
+     * @throws ValidationException
+     * @throws AuthenticationException
+     * @throws ApiException
+     */
+    public function test_it_gets_credit_successfully(): void
+    {
+        // 1. Arrange
+        // Mock the exact response from the API
+        $mockResponseJson = json_encode(["credit" => 12345.50]);
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], $mockResponseJson);
+        $this->mockHandler->append($mockResponse);
+
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
+        // 2. Act
+        $result = $client->account()->getCredit();
+
+        // 3. Assert (A. Check the DTO response)
+        $this->assertEquals(12345.50, $result->credit);
+        $this->assertIsFloat($result->credit); // Ensure correct type casting
+
+        // 3. Assert (B. Check the request that was sent)
+        $this->assertCount(1, $this->historyContainer); // Ensure a request was made
+        $request = $this->historyContainer[0]['request'];
+
+        $this->assertEquals('GET', $request->getMethod());
+        $this->assertEquals('/v1/users/me/credit', $request->getUri()->getPath());
+        $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
+        $this->assertEquals('', $request->getUri()->getQuery()); // Ensure no query params were sent
     }
 }

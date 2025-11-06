@@ -4,6 +4,7 @@ namespace Sapak\Sms;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
+use Sapak\Sms\Resources\AccountResource;
 use Sapak\Sms\Resources\MessageResource;
 
 /**
@@ -69,5 +70,13 @@ class SapakClient
     public function messages(): MessageResource
     {
         return new MessageResource($this->httpClient);
+    }
+
+    /**
+     * Access the Account resources (e.g., credit).
+     */
+    public function account(): AccountResource
+    {
+        return new AccountResource($this->httpClient);
     }
 }
