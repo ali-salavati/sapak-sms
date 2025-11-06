@@ -62,6 +62,6 @@ class FindMessages
      */
     private function toApiFormat(?DateTimeInterface $date): ?string
     {
-        return $date ? Jalalian::fromDateTime($date)->format('datetime') : null;
+        return $date ? Jalalian::fromDateTime($date)->format('Y-m-d H:i:s') : null;
     }
 }
