@@ -62,9 +62,6 @@ class MessageResource extends AbstractResource
 
         // Map DTOs to payload array
         $payload = array_map(function (SendPeerToPeer $dto) {
-            if (! $dto instanceof SendPeerToPeer) {
-                throw new InvalidArgumentException('All items must be instances of SendPeerToPeer.');
-            }
             return $dto->toArray();
         }, $messages);
 

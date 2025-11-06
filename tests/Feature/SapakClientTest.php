@@ -2,143 +2,200 @@
 
 namespace Sapak\Sms\Tests\Feature;
 
-use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use Sapak\Sms\SapakClient;
 use Sapak\Sms\DTOs\Requests\SendMessage;
+use Sapak\Sms\DTOs\Requests\SendPeerToPeer;
 use Sapak\Sms\DTOs\Responses\SentMessageStatus;
 use Sapak\Sms\Exceptions\ApiException;
 use Sapak\Sms\Exceptions\AuthenticationException;
 use Sapak\Sms\Exceptions\ValidationException;
-use GuzzleHttp\Handler\MockHandler;
-use GuzzleHttp\HandlerStack;
-use GuzzleHttp\Psr7\Response;
-use GuzzleHttp\Middleware;
 
-/**
- * Feature tests for the main SapakClient.
- * These tests verify the complete request/response flow without real API calls.
- */
 class SapakClientTest extends TestCase
 {
-    private MockHandler $mockHandler;
-    private array $historyContainer = [];
-    private SapakClient $client;
-    private SendMessage $validMessageDto;
+    protected MockHandler $mockHandler;
+    protected array $historyContainer = [];
+    protected HandlerStack $handlerStack;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // 1. Prepare a Guzzle Mock Handler
+        // Prepare a mock handler and history middleware
         $this->mockHandler = new MockHandler();
-        $handlerStack = HandlerStack::create($this->mockHandler);
-
-        // 2. Add a history middleware to inspect outgoing requests
-        $historyMiddleware = Middleware::history($this->historyContainer);
-        $handlerStack->push($historyMiddleware);
-
-        // 3. Initialize the SDK client with mocked Guzzle handler
-        $this->client = new SapakClient(
-            apiKey: 'TEST_API_KEY',
-            guzzleConfig: [
-                'handler' => $handlerStack
-            ]
-        );
-
-        // 4. Prepare a valid DTO for message sending tests
-        $this->validMessageDto = new SendMessage(
-            from: '985000',
-            to: ['98912'],
-            text: 'Test'
-        );
+        $this->handlerStack = HandlerStack::create($this->mockHandler);
+        $history = Middleware::history($this->historyContainer);
+        $this->handlerStack->push($history);
     }
 
     /**
      * @throws ValidationException
      * @throws AuthenticationException
-     * @throws GuzzleException
      * @throws ApiException
      */
     public function test_it_sends_message_successfully_and_returns_dto(): void
     {
-        // Mock a successful API response (200)
-        $mockApiResponse = [
-            ['id' => 12345, 'status' => 1],
-            ['id' => 12346, 'status' => 3]
-        ];
-        $this->mockHandler->append(new Response(200, [], json_encode($mockApiResponse)));
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], json_encode([
+            ['id' => 12345, 'status' => 1]
+        ]));
+        $this->mockHandler->append($mockResponse);
 
-        // Execute method
-        $result = $this->client->messages()->send($this->validMessageDto);
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
 
-        // Assert the response structure
-        $this->assertIsArray($result);
-        $this->assertCount(2, $result);
-        $this->assertInstanceOf(SentMessageStatus::class, $result[0]);
-        $this->assertEquals(12345, $result[0]->id);
-        $this->assertEquals(3, $result[1]->status);
+        $messageDto = new SendMessage(
+            from: '985000',
+            to: ['98912...'],
+            text: 'Test Body'
+        );
 
-        // Assert the outgoing request
+        $results = $client->messages()->send($messageDto);
+
+        $this->assertIsArray($results);
+        $this->assertCount(1, $results);
+        $this->assertInstanceOf(SentMessageStatus::class, $results[0]);
+        $this->assertEquals(12345, $results[0]->id);
+        $this->assertEquals(1, $results[0]->status);
+
         $this->assertCount(1, $this->historyContainer);
         $request = $this->historyContainer[0]['request'];
 
-        $this->assertEquals('POST', $request->getMethod());
         $this->assertEquals('/v1/messages', $request->getUri()->getPath());
+        $this->assertEquals('POST', $request->getMethod());
         $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
-        $this->assertEquals(json_encode($this->validMessageDto), (string) $request->getBody());
+        $this->assertEquals('application/json', $request->getHeaderLine('Accept'));
+
+        $expectedBody = [
+            'from' => '985000',
+            'to' => ['98912...'],
+            'text' => 'Test Body',
+            'isFlash' => false,
+            'sendAt' => null,
+        ];
+
+        $this->assertEquals($expectedBody, json_decode($request->getBody()->getContents(), true));
     }
 
     /**
      * @throws ValidationException
-     * @throws GuzzleException
      * @throws ApiException
      */
     public function test_it_throws_authentication_exception_on_401(): void
     {
-        // Mock a 401 Unauthorized response
-        $mockApiResponse = ['message' => 'Invalid API Key'];
-        $this->mockHandler->append(new Response(401, [], json_encode($mockApiResponse)));
+        $mockResponse = new Response(401, ['Content-Type' => 'application/json'], json_encode([
+            'message' => 'Invalid API Key'
+        ]));
+        $this->mockHandler->append($mockResponse);
 
-        // Expect an AuthenticationException
+        $client = new SapakClient('INVALID_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
         $this->expectException(AuthenticationException::class);
         $this->expectExceptionMessage('Invalid API Key');
 
-        $this->client->messages()->send($this->validMessageDto);
+        $messageDto = new SendMessage('985000', ['98912...'], 'Test');
+        $client->messages()->send($messageDto);
     }
 
     /**
      * @throws AuthenticationException
-     * @throws GuzzleException
      * @throws ApiException
      */
     public function test_it_throws_validation_exception_on_400(): void
     {
-        // Mock a 400 Bad Request response
-        $mockApiResponse = ['message' => 'Text is empty'];
-        $this->mockHandler->append(new Response(400, [], json_encode($mockApiResponse)));
+        $mockResponse = new Response(400, ['Content-Type' => 'application/json'], json_encode([
+            'message' => '"text" is required'
+        ]));
+        $this->mockHandler->append($mockResponse);
 
-        // Expect a ValidationException
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
         $this->expectException(ValidationException::class);
-        $this->expectExceptionMessage('Text is empty');
+        $this->expectExceptionMessage('"text" is required');
 
-        $this->client->messages()->send($this->validMessageDto);
+        $messageDto = new SendMessage('985000', ['98912...'], '');
+        $client->messages()->send($messageDto);
     }
 
     /**
-     * @throws ValidationException
      * @throws AuthenticationException
-     * @throws GuzzleException
+     * @throws ValidationException
      */
     public function test_it_throws_api_exception_on_500(): void
     {
-        // Mock a 500 Internal Server Error response
-        $this->mockHandler->append(new Response(500, [], 'Internal Server Error'));
+        $mockResponse = new Response(500, ['Content-Type' => 'application/json'], json_encode([
+            'message' => 'Internal Server Error'
+        ]));
+        $this->mockHandler->append($mockResponse);
 
-        // Expect a generic ApiException
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
         $this->expectException(ApiException::class);
-        $this->expectExceptionMessage('API server error');
+        $this->expectExceptionMessage('Internal Server Error');
 
-        $this->client->messages()->send($this->validMessageDto);
+        $messageDto = new SendMessage('985000', ['98912...'], 'Test');
+        $client->messages()->send($messageDto);
+    }
+
+    /**
+     * @throws AuthenticationException
+     * @throws ValidationException
+     * @throws ApiException
+     */
+    public function test_it_sends_p2p_message_successfully_and_returns_dto(): void
+    {
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], json_encode([
+            ['id' => 98765, 'status' => 1],
+            ['id' => 98766, 'status' => 2]
+        ]));
+        $this->mockHandler->append($mockResponse);
+
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
+        $p2pMessage1 = new SendPeerToPeer(
+            sender: '985000',
+            recipient: '98912111',
+            message: 'Hello 1'
+        );
+        $p2pMessage2 = new SendPeerToPeer(
+            sender: '985000',
+            recipient: '98912222',
+            message: 'Hello 2'
+        );
+
+        $results = $client->messages()->sendPeerToPeer([$p2pMessage1, $p2pMessage2]);
+
+        $this->assertIsArray($results);
+        $this->assertCount(2, $results);
+        $this->assertInstanceOf(SentMessageStatus::class, $results[0]);
+        $this->assertEquals(98765, $results[0]->id);
+        $this->assertEquals(2, $results[1]->status);
+
+        $this->assertCount(1, $this->historyContainer);
+        $request = $this->historyContainer[0]['request'];
+
+        $this->assertEquals('/v1/messages/p2p', $request->getUri()->getPath());
+        $this->assertEquals('POST', $request->getMethod());
+        $this->assertEquals('TEST_API_KEY', $request->getHeaderLine('X-API-KEY'));
+        $this->assertEquals('application/json', $request->getHeaderLine('Accept'));
+
+        $expectedBody = [
+            [
+                'sender' => '985000',
+                'recipient' => '98912111',
+                'message' => 'Hello 1',
+                'sendAt' => null
+            ],
+            [
+                'sender' => '985000',
+                'recipient' => '98912222',
+                'message' => 'Hello 2',
+                'sendAt' => null
+            ]
+        ];
+
+        $this->assertEquals($expectedBody, json_decode($request->getBody()->getContents(), true));
     }
 }
