@@ -3,9 +3,12 @@
 namespace Sapak\Sms\Resources;
 
 use InvalidArgumentException;
+use Morilog\Jalali\Jalalian;
 use Psr\Http\Message\ResponseInterface;
+use Sapak\Sms\DTOs\Requests\FindMessages;
 use Sapak\Sms\DTOs\Requests\SendMessage;
 use Sapak\Sms\DTOs\Requests\SendPeerToPeer;
+use Sapak\Sms\DTOs\Responses\ReceivedMessage;
 use Sapak\Sms\DTOs\Responses\SentMessageStatus;
 use Sapak\Sms\Exceptions\ApiException;
 use Sapak\Sms\Exceptions\AuthenticationException;
@@ -71,6 +74,39 @@ class MessageResource extends AbstractResource
         ]);
 
         return $this->handleSendResponse($response);
+    }
+
+    /**
+     * Retrieve received messages based on filters.
+     *
+     * @param FindMessages $filters DTO containing query parameters (pagination, filters).
+     * @return ReceivedMessage[] An array of received message DTOs.
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     */
+    public function find(FindMessages $filters): array
+    {
+        $response = $this->request('get', 'messages/find', [
+            'query' => $filters->toArray()
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), true);
+
+        return array_map(function (array $item) {
+            $date = Jalalian::fromFormat('Y/m/d H:i:s', $item['date'])
+                ->toCarbon()
+                ->toDateTimeImmutable();
+
+            return new ReceivedMessage(
+                id: $item['id'],
+                date: $date,
+                body: $item['body'],
+                fromNumber: $item['fromNumber'],
+                toNumber: $item['toNumber']
+            );
+        }, $data);
     }
 
     /**

@@ -2,11 +2,14 @@
 
 namespace Sapak\Sms\Tests\Feature;
 
+use DateTime;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
+use Sapak\Sms\DTOs\Requests\FindMessages;
+use Sapak\Sms\DTOs\Responses\ReceivedMessage;
 use Sapak\Sms\SapakClient;
 use Sapak\Sms\DTOs\Requests\SendMessage;
 use Sapak\Sms\DTOs\Requests\SendPeerToPeer;
@@ -184,5 +187,54 @@ class SapakClientTest extends TestCase
             ]
         ];
         $this->assertEquals($expectedBody, json_decode($request->getBody()->getContents(), true));
+    }
+
+    /**
+     * @throws AuthenticationException
+     * @throws ValidationException
+     * @throws ApiException
+     */
+    public function test_it_finds_messages_successfully_and_returns_dto(): void
+    {
+        $jalaliDateString = '1404/08/16 01:14:40';
+        $mockResponseJson = json_encode([
+            [
+                "id" => 123,
+                "date" => $jalaliDateString,
+                "body" => "Hello",
+                "fromNumber" => "98912...",
+                "toNumber" => "985000"
+            ]
+        ]);
+        $mockResponse = new Response(200, ['Content-Type' => 'application/json'], $mockResponseJson);
+        $this->mockHandler->append($mockResponse);
+
+        $client = new SapakClient('TEST_API_KEY', guzzleConfig: ['handler' => $this->handlerStack]);
+
+        $gregorianDate = new DateTime('2023-10-30 10:00:00');
+        $filters = new FindMessages(fromDate: $gregorianDate);
+
+        $results = $client->messages()->find($filters);
+
+        $this->assertIsArray($results);
+        $this->assertInstanceOf(ReceivedMessage::class, $results[0]);
+        $this->assertEquals(123, $results[0]->id);
+
+        $this->assertInstanceOf(\DateTimeImmutable::class, $results[0]->date);
+
+        $this->assertEquals(
+            '2025-11-07 01:14:40',
+            $results[0]->date->format('Y-m-d H:i:s')
+        );
+
+        $request = $this->historyContainer[0]['request'];
+        $this->assertEquals('GET', $request->getMethod());
+        $this->assertEquals('/v1/messages/find', $request->getUri()->getPath());
+
+        $expectedQuery = 'fromDate=1402-08-08+10%3A00%3A00'; // 1402-08-08 10:00:00
+        $this->assertEquals(
+            str_replace('+', '%20', $expectedQuery),
+            str_replace('+', '%20', $request->getUri()->getQuery())
+        );
     }
 }
