@@ -2,93 +2,95 @@
 
 namespace Sapak\Sms\Resources;
 
-use Exception;
-use GuzzleHttp\Exception\GuzzleException;
+use InvalidArgumentException;
+use Psr\Http\Message\ResponseInterface;
 use Sapak\Sms\DTOs\Requests\SendMessage;
+use Sapak\Sms\DTOs\Requests\SendPeerToPeer;
 use Sapak\Sms\DTOs\Responses\SentMessageStatus;
 use Sapak\Sms\Exceptions\ApiException;
 use Sapak\Sms\Exceptions\AuthenticationException;
 use Sapak\Sms\Exceptions\ValidationException;
-use GuzzleHttp\Exception\ClientException;
-use GuzzleHttp\Exception\ServerException;
-use Psr\Http\Message\ResponseInterface;
 
 /**
- * Handles all API endpoints related to messages.
+ * Handles all API interactions related to messages.
+ * Examples: sending messages, checking status, receiving messages.
  */
 class MessageResource extends AbstractResource
 {
     /**
-     * Send a "one-to-many" message.
-     * Corresponds to POST /v1/messages
+     * Send a message to one or more recipients (one-to-many).
      *
-     * @param SendMessage $message The validated DTO containing message details.
-     * @return SentMessageStatus[] Array of status DTOs, one per recipient.
+     * @param SendMessage $message DTO containing message parameters.
+     * @return SentMessageStatus[] Array of DTOs with message ID and status.
      *
      * @throws ApiException
      * @throws AuthenticationException
      * @throws ValidationException
-     * @throws GuzzleException
      */
     public function send(SendMessage $message): array
     {
-        try {
-            $response = $this->httpClient->post('messages', [
-                // Guzzle automatically serializes public properties of the DTO
-                'json' => $message
-            ]);
+        $payload = $message->toArray();
 
-            return $this->mapResponseToSentMessageStatus($response);
+        // Send request using the abstracted method from AbstractResource
+        $response = $this->request('post', 'messages', [
+            'json' => $payload
+        ]);
 
-        } catch (ClientException $e) {
-            // 4xx Errors
-            $this->handleClientError($e);
-        } catch (ServerException $e) {
-            // 5xx Errors
-            throw new ApiException("API server error: " . $e->getMessage(), $e->getCode(), $e);
-        } catch (Exception $e) {
-            // Other Guzzle/network errors
-            throw new ApiException("Network or client error: " . $e->getMessage(), $e->getCode(), $e);
-        }
+        return $this->handleSendResponse($response);
     }
 
     /**
-     * Maps the 4xx HTTP errors to our custom exceptions.
-     * @throws ValidationException
-     * @throws AuthenticationException
-     * @throws ApiException
-     */
-    private function handleClientError(ClientException $e): void
-    {
-        $response = $e->getResponse();
-        $statusCode = $response->getStatusCode();
-        $body = json_decode($response->getBody()->getContents(), true);
-        $message = $body['message'] ?? 'Unknown client error';
-
-        match ($statusCode) {
-            400 => throw new ValidationException($message, $statusCode, $e),
-            401, 403 => throw new AuthenticationException($message, $statusCode, $e),
-            404 => throw new ApiException("Endpoint not found: " . $e->getRequest()->getUri(), $statusCode, $e),
-            default => throw new ApiException($message, $statusCode, $e),
-        };
-    }
-
-    /**
-     * Maps the 200 OK response body to an array of DTOs.
+     * Send multiple peer-to-peer messages in a single batch.
      *
-     * @return SentMessageStatus[]
+     * @param SendPeerToPeer[] $messages Array of P2P DTOs.
+     * @return SentMessageStatus[] Array of DTOs with message ID and status.
+     *
+     * @throws ApiException
+     * @throws AuthenticationException
+     * @throws ValidationException
+     * @throws InvalidArgumentException If the input array is invalid.
      */
-    private function mapResponseToSentMessageStatus(ResponseInterface $response): array
+    public function sendPeerToPeer(array $messages): array
+    {
+        // Validate input array
+        if (empty($messages)) {
+            throw new InvalidArgumentException('Input array cannot be empty.');
+        }
+        if (count($messages) > 100) {
+            throw new InvalidArgumentException('Cannot send more than 100 P2P messages in a single request.');
+        }
+
+        // Map DTOs to payload array
+        $payload = array_map(function (SendPeerToPeer $dto) {
+            if (! $dto instanceof SendPeerToPeer) {
+                throw new InvalidArgumentException('All items must be instances of SendPeerToPeer.');
+            }
+            return $dto->toArray();
+        }, $messages);
+
+        // Send request
+        $response = $this->request('post', 'messages/p2p', [
+            'json' => $payload
+        ]);
+
+        return $this->handleSendResponse($response);
+    }
+
+    /**
+     * Parse successful 200 OK response for send and sendPeerToPeer methods.
+     *
+     * @param ResponseInterface $response The API response.
+     * @return SentMessageStatus[] Array of DTOs with message ID and status.
+     */
+    private function handleSendResponse(ResponseInterface $response): array
     {
         $data = json_decode($response->getBody()->getContents(), true);
 
-        // Map the raw array to an array of DTOs
-        return array_map(
-            fn (array $item) => new SentMessageStatus(
-                $item['id'],
-                $item['status']
-            ),
-            $data
-        );
+        return array_map(function (array $item) {
+            return new SentMessageStatus(
+                id: $item['id'],
+                status: $item['status']
+            );
+        }, $data);
     }
 }
