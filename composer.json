@@ -1,13 +1,8 @@
 {
-    "name": "salavati/sapak-sms",
+    "name": "salavati/sapak-sms-php",
     "description": "A lightweight PHP SDK for SAPAK SMS API",
     "type": "library",
     "license": "MIT",
-    "autoload": {
-        "psr-4": {
-            "Salavati\\SapakSms\\": "src/"
-        }
-    },
     "authors": [
         {
             "name": "Ali Salavati",
@@ -22,5 +17,19 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^12.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "Sapak\\Sms\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Sapak\\Sms\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test-coverage": "phpunit --coverage-html build/coverage"
     }
 }

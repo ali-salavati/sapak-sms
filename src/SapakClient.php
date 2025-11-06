@@ -7,7 +7,9 @@ use GuzzleHttp\ClientInterface;
 use Sapak\Sms\Resources\MessageResource;
 
 /**
- * Main Entrypoint for the Sapak SMS SDK.
+ * Main entry point for the Sapak SMS SDK.
+ *
+ * Handles API configuration, authentication, and provides access to resources.
  */
 class SapakClient
 {
@@ -16,38 +18,56 @@ class SapakClient
     protected ClientInterface $httpClient;
 
     /**
-     * @param string $apiKey Your X-API-KEY
-     * @param string|null $baseUri Optional base URI override for testing/staging.
-     * @param ClientInterface|null $httpClient Optional custom Guzzle client.
+     * Create a new SapakClient instance.
+     *
+     * @param string $apiKey Your SAPAK API key.
+     * @param string|null $baseUri Optional custom base URI (for testing/staging).
+     * @param array $guzzleConfig Optional Guzzle configuration (e.g., custom handler for mocks).
      */
     public function __construct(
         private readonly string $apiKey,
         ?string $baseUri = null,
-        ?ClientInterface $httpClient = null
+        array $guzzleConfig = []
     ) {
-        if ($httpClient) {
-            $this->httpClient = $httpClient;
-            return;
-        }
-
-        $this->httpClient = new Client([
+        // Default configuration (headers, timeout, base URI)
+        $defaultConfig = [
             'base_uri' => $baseUri ?? self::DEFAULT_BASE_URI,
-            'headers' => [
-                'X-API-KEY' => $this->apiKey,
-                'Accept' => 'application/json',
-                'Content-Type' => 'application/json',
-            ],
-            'timeout' => 5.0, // A reasonable default timeout
-        ]);
+            'headers' => $this->getDefaultHeaders(),
+            'timeout' => 5.0,
+        ];
+
+        // Merge custom headers (SDK defaults take precedence)
+        $customHeaders = $guzzleConfig['headers'] ?? [];
+        $defaultConfig['headers'] = $customHeaders + $defaultConfig['headers'];
+
+        // Merge custom config (user-provided options override defaults)
+        $finalConfig = $guzzleConfig + $defaultConfig;
+        $finalConfig['headers'] = $defaultConfig['headers'];
+
+        $this->httpClient = new Client($finalConfig);
     }
 
     /**
-     * Access the Message resources (send, status, receive).
+     * Get default request headers for all API calls.
+     *
+     * @return array<string, string>
+     */
+    private function getDefaultHeaders(): array
+    {
+        return [
+            'X-API-KEY' => $this->apiKey,
+            'Accept' => 'application/json',
+            'Content-Type' => 'application/json',
+        ];
+    }
+
+    /**
+     * Access message-related API endpoints.
+     *
+     * @return MessageResource
      */
     public function messages(): MessageResource
     {
-        // This is the "Resource" pattern. The client delegates
-        // work to specialized classes.
         return new MessageResource($this->httpClient);
     }
 }
