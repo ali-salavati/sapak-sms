@@ -2,11 +2,19 @@
     "name": "salavati/sapak-sms-php",
     "description": "A lightweight PHP SDK for SAPAK SMS API",
     "type": "library",
+    "keywords": [
+        "sapak",
+        "sms",
+        "sdk",
+        "php",
+        "api"
+    ],
     "license": "MIT",
     "authors": [
         {
             "name": "Ali Salavati",
-            "email": "salavati.cuber@gmail.com"
+            "email": "salavati.cuber@gmail.com",
+            "role": "Developer"
         }
     ],
     "minimum-stability": "stable",
