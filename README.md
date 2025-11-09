@@ -19,7 +19,7 @@ This SDK is built with developers in mind, focusing on clean code principles, st
   - [A. Get Account Credit](#a-get-account-credit)  
   - [B. Send Message (One-to-Many)](#b-send-message-one-to-many)  
   - [C. Send Messages (Peer-to-Peer)](#c-send-messages-peer-to-peer)  
-  - [D. Get Message Statuses (The Safe Way)](#d-get-message-statuses-the-safe-way)  
+  - [D. Get Message Statuses (The Safe Way)](#d-get-message-statuses)  
   - [E. Find Received Messages (Smart Date Handling)](#e-find-received-messages-smart-date-handling)  
 - [Testing](#testing)  
 
