@@ -2,7 +2,7 @@
 
 A modern, clean, and opinionated PHP SDK for interacting with the Sapak SMS API.
 
-This SDK is built with developers in mind, focusing on clean code principles, strong typing, and a safe, ergonomic developer experience. It abstracts away the inconsistencies of the underlying API and actively prevents common pitfalls like N+1 API calls.
+This SDK is built with developers in mind, focusing on clean code principles, strong typing, and a safe, ergonomic developer experience.
 
 > **Note:** This is an unofficial SDK.  
 > The official Sapak API documentation can be found at: [https://docs.sapak.me/](https://docs.sapak.me/)
@@ -43,8 +43,6 @@ Install the package via Composer:
 ```bash
 composer require salavati/sapak-sms-php
 ```
-
-> **Note:** This package requires `morilog/jalali` for date conversions.
 
 ---
 
