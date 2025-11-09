@@ -153,7 +153,7 @@ $p2p_messages = [
 $results = $client->messages()->sendPeerToPeer($p2p_messages);
 ```
 
-### D. Get Message Statuses (The Safe Way)
+### D. Get Message Statuses
 
 To prevent N+1 API requests, this SDK only supports checking statuses in a batch. If you need to check only one ID, pass it as an array: `getStatuses([12345])`.
 
