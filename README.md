@@ -211,7 +211,7 @@ foreach ($receivedMessages as $message) {
 To run the test suite, clone the repository, install dependencies, and run PHPUnit:
 
 ```bash
-git clone https://github.com/sapak/sapak-sms-php.git
+git clone https://github.com/ali-salavati/sapak-sms.git
 cd sapak-sms-php
 composer install
 composer test
